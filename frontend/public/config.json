@@ -9,13 +9,13 @@
   "VUE_APP_BASE_URL": "https://svp-international.pacc.sa",
   "VUE_APP_CERTIFICATE_PRICE": "25",
   "VUE_APP_CLARITY_ENABLED": "true",
-  "VUE_APP_CLARITY_ID": "nm26lw0boc",
+  "VUE_APP_CLARITY_ID": "REPLACE_WITH_CLARITY_ID",
   "VUE_APP_ENV": "production",
-  "VUE_APP_GTM_KEY": "GTM-5TV8929L",
+  "VUE_APP_GTM_KEY": "REPLACE_WITH_GTM_KEY",
   "VUE_APP_HOST": "svp-international.pacc.sa",
-  "VUE_APP_MAP_API_KEY": "AIzaSyBbmPcY4YBsWhyoMGeGD6H3_e16ToGoAps",
+  "VUE_APP_MAP_API_KEY": "REPLACE_WITH_MAP_API_KEY",
   "VUE_APP_PAYMENT_API": "https://eu-prod.oppwa.com/v1/paymentWidgets.js",
-  "VUE_APP_RECAPTCHA_KEY": "6LdhZ_IUAAAAABjY17EoRq8fLJSj8dtNgcMeddrr",
+  "VUE_APP_RECAPTCHA_KEY": "REPLACE_WITH_RECAPTCHA_SITE_KEY",
   "VUE_APP_SERVER_URL": "https://svp-international-api.pacc.sa",
-  "VUE_APP_ZENDESK_KEY": "80b3ed13-ca6c-41ce-b8b2-9c82787ed3c0"
+  "VUE_APP_ZENDESK_KEY": "REPLACE_WITH_ZENDESK_KEY"
 }

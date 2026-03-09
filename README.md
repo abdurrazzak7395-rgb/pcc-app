@@ -39,3 +39,19 @@ Go to: http://localhost:3000/auth/login
 
 ## Booking Modal UI
 - Open Dashboard and click **Create New Booking** to use the modal UI similar to your screenshot.
+
+## Public Repo And Fork Use
+- This repository is prepared for public fork usage.
+- Public runtime keys in `frontend/public/config.json` are placeholders. Set your own values before deployment.
+- Do not commit private `.env` files (`backend/.env`, `frontend/.env.local`).
+
+### Make GitHub Repo Public
+1. Open repo settings: `https://github.com/abdurrazzak7395-rgb/pcc-app/settings`
+2. Go to **General** -> **Danger Zone**.
+3. Click **Change repository visibility** -> **Make public**.
+4. Confirm repository name.
+
+### Fork
+1. Open `https://github.com/abdurrazzak7395-rgb/pcc-app`
+2. Click **Fork** (top-right).
+3. Choose your account/org and create fork.
