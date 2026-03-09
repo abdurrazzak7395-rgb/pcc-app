@@ -4,128 +4,222 @@ import { api } from "../../lib/api";
 
 function pickArray(json) {
   if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.occupations)) return json.occupations;
+  if (Array.isArray(json?.exam_sessions)) return json.exam_sessions;
+  if (Array.isArray(json?.available_dates)) return json.available_dates;
   if (Array.isArray(json?.data)) return json.data;
+  if (Array.isArray(json?.data?.occupations)) return json.data.occupations;
+  if (Array.isArray(json?.data?.exam_sessions)) return json.data.exam_sessions;
+  if (Array.isArray(json?.data?.available_dates)) return json.data.available_dates;
   if (Array.isArray(json?.items)) return json.items;
   if (Array.isArray(json?.results)) return json.results;
-  return null;
+  return [];
+}
+
+function uniqueBy(arr, keyFn) {
+  const map = new Map();
+  for (const item of arr || []) {
+    const key = keyFn(item);
+    if (key == null || key === "") continue;
+    if (!map.has(key)) map.set(key, item);
+  }
+  return Array.from(map.values());
+}
+
+function normalizeOccupation(o) {
+  const categoryId = o?.category_id ?? o?.category?.id ?? "";
+  const languageCodes = (o?.category?.prometric_codes || [])
+    .map((p) => p?.code)
+    .filter(Boolean);
+  return {
+    id: o?.id,
+    name: o?.name || o?.english_name || o?.arabic_name || `Occupation #${o?.id}`,
+    categoryId: String(categoryId || ""),
+    categoryName: o?.category_name_en || o?.category?.english_name || o?.category_name_ar || o?.category?.arabic_name || "",
+    languageCodes,
+    raw: o,
+  };
+}
+
+function normalizeDateItem(item) {
+  const date = item?.exam_date || item?.date || item?.day || item?.start_at_date || "";
+  if (typeof date !== "string" || !date.match(/^\d{4}-\d{2}-\d{2}$/)) return null;
+  return date;
+}
+
+function normalizeSession(s) {
+  const id = s?.id || s?.exam_session_id || null;
+  const cityName =
+    s?.city ||
+    s?.site_city_name ||
+    s?.test_center_city ||
+    s?.site_city?.name ||
+    "";
+  const cityId =
+    s?.city_id ??
+    s?.site_city_id ??
+    s?.site_city?.id ??
+    null;
+  const siteId =
+    s?.site_id ??
+    s?.test_center_id ??
+    s?.site?.id ??
+    null;
+  const startAt = s?.start_at || s?.start_time || "";
+  const testCenterName = s?.test_center_name || s?.site_name || s?.site?.name || "";
+  return {
+    id: id ? String(id) : "",
+    cityName: String(cityName || ""),
+    cityId: cityId == null ? "" : String(cityId),
+    siteId: siteId == null ? "" : String(siteId),
+    startAt: String(startAt || ""),
+    testCenterName: String(testCenterName || ""),
+    raw: s,
+  };
 }
 
 export default function ExamBooking() {
   const [out, setOut] = useState("");
-  const [step, setStep] = useState("search");
+  const [loading, setLoading] = useState(false);
 
-  // Search inputs (available dates)
   const [categoryId, setCategoryId] = useState("56");
   const [startDateFrom, setStartDateFrom] = useState("");
   const [perPage, setPerPage] = useState("1000");
   const [availableSeats, setAvailableSeats] = useState("greater_than::0");
   const [status, setStatus] = useState("scheduled");
 
-  // Sessions filter
-  const [city, setCity] = useState("Mymensingh");
-  const [examDate, setExamDate] = useState("");
-
-  // Booking inputs
   const [occupationId, setOccupationId] = useState("");
+  const [city, setCity] = useState("");
+  const [cityId, setCityId] = useState("");
+  const [examDate, setExamDate] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [siteCity, setSiteCity] = useState("");
   const [languageCode, setLanguageCode] = useState("MTDBB");
   const [methodology, setMethodology] = useState("in_person");
 
-  // Data
   const [availableDatesRaw, setAvailableDatesRaw] = useState(null);
+  const [occupationsRaw, setOccupationsRaw] = useState(null);
   const [sessionsRaw, setSessionsRaw] = useState(null);
-  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [holdRaw, setHoldRaw] = useState(null);
   const [reservationRaw, setReservationRaw] = useState(null);
 
-  // Occupations (optional helper)
-  const [occupationsRaw, setOccupationsRaw] = useState(null);
+  const occList = useMemo(() => pickArray(occupationsRaw).map(normalizeOccupation).filter((o) => o.id), [occupationsRaw]);
+  const dateList = useMemo(() => uniqueBy(pickArray(availableDatesRaw).map(normalizeDateItem).filter(Boolean), (d) => d), [availableDatesRaw]);
+  const sessionList = useMemo(() => pickArray(sessionsRaw).map(normalizeSession).filter((s) => s.id), [sessionsRaw]);
+  const cityOptions = useMemo(() => uniqueBy(sessionList, (s) => `${s.cityName}::${s.cityId}`), [sessionList]);
+
+  const selectedOccupation = useMemo(
+    () => occList.find((o) => String(o.id) === String(occupationId)) || null,
+    [occList, occupationId]
+  );
+  const selectedSession = useMemo(
+    () => sessionList.find((s) => String(s.id) === String(selectedSessionId)) || null,
+    [sessionList, selectedSessionId]
+  );
 
   useEffect(() => {
     const t = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    if (!t) window.location.href = "/auth/login";
+    if (!t) {
+      window.location.href = "/auth/login";
+      return;
+    }
+    loadOccupations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!selectedOccupation) return;
+    if (selectedOccupation.categoryId && selectedOccupation.categoryId !== categoryId) {
+      setCategoryId(selectedOccupation.categoryId);
+    }
+    if (selectedOccupation.languageCodes.length > 0 && !selectedOccupation.languageCodes.includes(languageCode)) {
+      setLanguageCode(selectedOccupation.languageCodes[0]);
+    }
+  }, [selectedOccupation, categoryId, languageCode]);
+
+  useEffect(() => {
+    if (!selectedSession) return;
+    setSiteId(selectedSession.siteId || "");
+    setSiteCity(selectedSession.cityName || "");
+    setCity(selectedSession.cityName || city);
+    setCityId(selectedSession.cityId || "");
+  }, [selectedSession, city]);
+
   async function loadOccupations() {
+    setLoading(true);
     setOut("Loading occupations...");
     try {
       const res = await api("/api/svp/occupations");
       setOccupationsRaw(res);
+      const list = pickArray(res).map(normalizeOccupation).filter((o) => o.id);
+      if (!occupationId && list[0]?.id) setOccupationId(String(list[0].id));
       setOut(JSON.stringify(res, null, 2));
-      const arr = pickArray(res);
-      // try to prefill occupation_id from the first item
-      if (!occupationId && arr?.[0]?.id) setOccupationId(String(arr[0].id));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
     }
   }
 
   async function searchAvailableDates(e) {
     e?.preventDefault?.();
+    setLoading(true);
     setOut("Searching available dates...");
-    setStep("search");
-
-    // Default start date = today if empty
     const sd = startDateFrom || new Date().toISOString().slice(0, 10);
-
-    const qs = new URLSearchParams({
-      per_page: perPage,
-      category_id: categoryId,
-      start_at_date_from: sd,
-      available_seats: availableSeats,
-      status,
-    }).toString();
-
     try {
+      const qs = new URLSearchParams({
+        per_page: perPage,
+        category_id: categoryId,
+        start_at_date_from: sd,
+        available_seats: availableSeats,
+        status,
+      }).toString();
+
       const res = await api(`/api/svp/available-dates?${qs}`);
       setAvailableDatesRaw(res);
-      setOut(JSON.stringify(res, null, 2));
 
-      // Try to auto-pick a date from response
-      const arr = pickArray(res);
-      const maybeDate =
-        (arr?.[0]?.date || arr?.[0]?.exam_date || arr?.[0]?.day || arr?.[0]) ?? "";
-      if (typeof maybeDate === "string" && maybeDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        setExamDate(maybeDate);
-      }
-      setStep("dates");
+      const dates = uniqueBy(pickArray(res).map(normalizeDateItem).filter(Boolean), (d) => d);
+      if (!examDate && dates[0]) setExamDate(dates[0]);
+      setOut(JSON.stringify(res, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
     }
   }
 
   async function loadExamSessions(e) {
     e?.preventDefault?.();
+    if (!examDate) return setOut("Select exam date first.");
+    if (!city) return setOut("Select or input city first.");
+    setLoading(true);
     setOut("Loading exam sessions...");
-    setStep("sessions");
-
-    const qs = new URLSearchParams({
-      category_id: categoryId,
-      city,
-      exam_date: examDate,
-    }).toString();
 
     try {
+      const qs = new URLSearchParams({
+        category_id: categoryId,
+        city,
+        exam_date: examDate,
+      }).toString();
+
       const res = await api(`/api/svp/exam-sessions?${qs}`);
       setSessionsRaw(res);
-      setOut(JSON.stringify(res, null, 2));
 
-      // Try to auto-pick first session id
-      const arr = pickArray(res);
-      const firstId = arr?.[0]?.id || arr?.[0]?.exam_session_id;
-      if (firstId) setSelectedSessionId(String(firstId));
-      setStep("sessions");
+      const first = pickArray(res).map(normalizeSession).find((s) => s.id);
+      if (first?.id) setSelectedSessionId(first.id);
+      setOut(JSON.stringify(res, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
     }
   }
 
   async function createHold() {
-    if (!selectedSessionId) return setOut("Select an exam session first.");
-
+    if (!selectedSessionId) return setOut("Select exam session first.");
+    setLoading(true);
     setOut("Creating temporary seat (hold)...");
-    setStep("hold");
-
-    // From Postman example: {"exam_session_id":[1199247],"methodology":"in_person"}
     try {
       const res = await api("/api/svp/temporary-seats", {
         method: "POST",
@@ -133,83 +227,92 @@ export default function ExamBooking() {
       });
       setHoldRaw(res);
       setOut(JSON.stringify(res, null, 2));
-      setStep("hold");
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
     }
   }
 
   function extractHoldId(json) {
-    // Try common shapes
-    return (
-      json?.hold_id ||
-      json?.id ||
-      json?.data?.hold_id ||
-      json?.data?.id ||
-      null
-    );
+    return json?.hold_id || json?.id || json?.data?.hold_id || json?.data?.id || null;
   }
 
   async function bookReservation() {
-    if (!selectedSessionId) return setOut("Select an exam session first.");
-    if (!occupationId) return setOut("occupation_id is required (pick from occupations).");
-
-    setOut("Booking exam reservation...");
-    setStep("book");
+    if (!selectedSessionId) return setOut("Select exam session first.");
+    if (!occupationId) return setOut("Select occupation first.");
 
     const holdId = holdRaw ? extractHoldId(holdRaw) : null;
+    const payloadSiteId = siteId ? Number(siteId) : null;
+    const payloadSiteCity = siteCity || city || null;
 
-    // From Postman example:
-    // {"exam_session_id":1055182,"occupation_id":2023,"language_code":"MTDBB","site_id":null,"site_city":null,"hold_id":null,"methodology":"in_person"}
     const body = {
       exam_session_id: Number(selectedSessionId),
       occupation_id: Number(occupationId),
       language_code: languageCode,
-      site_id: null,
-      site_city: null,
+      site_id: payloadSiteId,
+      site_city: payloadSiteCity,
       hold_id: holdId,
       methodology,
     };
 
+    setLoading(true);
+    setOut("Booking exam reservation...");
     try {
       const res = await api("/api/svp/exam-reservations", { method: "POST", body });
       setReservationRaw(res);
       setOut(JSON.stringify(res, null, 2));
-      setStep("booked");
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
     }
   }
-
-  const sessionList = useMemo(() => pickArray(sessionsRaw) || [], [sessionsRaw]);
-  const occList = useMemo(() => pickArray(occupationsRaw) || [], [occupationsRaw]);
 
   return (
     <div className="container">
       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Exam Search + Booking</h2>
+        <h2 style={{ margin: 0 }}>Full Booking (Live API)</h2>
         <Link href="/dashboard">Back</Link>
       </div>
 
       <div className="card">
-        <h3>1) Search Available Dates</h3>
+        <h3>1) Occupation + Category</h3>
+        <div className="row">
+          <div>
+            <label>Occupation</label>
+            <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)}>
+              {occList.map((o) => (
+                <option key={o.id} value={o.id}>
+                  #{o.id} - {o.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label>Category (auto from occupation)</label>
+            <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
+            {selectedOccupation?.categoryName ? <p className="small">{selectedOccupation.categoryName}</p> : null}
+          </div>
+        </div>
+        <button type="button" onClick={loadOccupations} disabled={loading}>Reload Occupations</button>
+      </div>
+
+      <div className="card">
+        <h3>2) Available Dates</h3>
         <form onSubmit={searchAvailableDates}>
           <div className="row">
-            <div>
-              <label>category_id</label>
-              <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
-            </div>
             <div>
               <label>start_at_date_from (YYYY-MM-DD)</label>
               <input value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} placeholder="auto = today" />
             </div>
-          </div>
-
-          <div className="row">
             <div>
               <label>per_page</label>
               <input value={perPage} onChange={(e) => setPerPage(e.target.value)} />
             </div>
+          </div>
+
+          <div className="row">
             <div>
               <label>available_seats</label>
               <input value={availableSeats} onChange={(e) => setAvailableSeats(e.target.value)} />
@@ -219,105 +322,116 @@ export default function ExamBooking() {
               <input value={status} onChange={(e) => setStatus(e.target.value)} />
             </div>
           </div>
-
-          <button type="submit">Search Dates</button>
-          <p className="small">
-            API: <code>/api/svp/available-dates</code> (query passthrough)
-          </p>
+          <button type="submit" disabled={loading}>Search Dates</button>
         </form>
+
+        {dateList.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <label>Exam Date</label>
+            <select value={examDate} onChange={(e) => setExamDate(e.target.value)}>
+              {dateList.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
-        <h3>2) Load Sessions (by date + city)</h3>
+        <h3>3) City + Sessions</h3>
         <div className="row">
           <div>
-            <label>city</label>
-            <input value={city} onChange={(e) => setCity(e.target.value)} />
+            <label>City</label>
+            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Mymensingh" />
           </div>
           <div>
-            <label>exam_date</label>
-            <input value={examDate} onChange={(e) => setExamDate(e.target.value)} placeholder="YYYY-MM-DD" />
+            <label>City ID (auto)</label>
+            <input value={cityId} readOnly />
           </div>
         </div>
-        <button onClick={loadExamSessions}>Load Sessions</button>
-        <p className="small">
-          API: <code>/api/svp/exam-sessions</code> (query passthrough)
-        </p>
-
-        {sessionList.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <label>Pick exam_session_id</label>
-            <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
-              {sessionList.map((s) => (
-                <option key={s.id || s.exam_session_id} value={s.id || s.exam_session_id}>
-                  #{s.id || s.exam_session_id} {s.city ? `- ${s.city}` : ""}{" "}
-                  {s.start_at ? `- ${s.start_at}` : ""}
+        {cityOptions.length > 0 ? (
+          <div style={{ marginTop: 8 }}>
+            <label>Detected Cities From Sessions</label>
+            <select
+              value={`${city}::${cityId}`}
+              onChange={(e) => {
+                const [name, id] = e.target.value.split("::");
+                setCity(name || "");
+                setCityId(id || "");
+              }}
+            >
+              {cityOptions.map((c) => (
+                <option key={`${c.cityName}::${c.cityId}`} value={`${c.cityName}::${c.cityId}`}>
+                  {c.cityName || "Unknown city"} {c.cityId ? `(city_id: ${c.cityId})` : ""}
                 </option>
               ))}
             </select>
           </div>
-        )}
+        ) : null}
+        <button onClick={loadExamSessions} type="button" disabled={loading}>Load Sessions</button>
+
+        {sessionList.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <label>Session</label>
+            <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
+              {sessionList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  #{s.id} {s.cityName ? `- ${s.cityName}` : ""} {s.testCenterName ? `- ${s.testCenterName}` : ""} {s.startAt ? `- ${s.startAt}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
-        <h3>3) Booking</h3>
-
+        <h3>4) Hold + Booking</h3>
         <div className="row">
           <div>
-            <label>methodology</label>
+            <label>Methodology</label>
             <select value={methodology} onChange={(e) => setMethodology(e.target.value)}>
               <option value="in_person">in_person</option>
               <option value="remote">remote</option>
             </select>
           </div>
           <div>
-            <label>language_code</label>
-            <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} />
+            <label>Language Code</label>
+            <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
+              {(selectedOccupation?.languageCodes?.length ? selectedOccupation.languageCodes : [languageCode]).map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div className="row">
           <div>
-            <label>occupation_id</label>
-            <input value={occupationId} onChange={(e) => setOccupationId(e.target.value)} placeholder="ex: 2023" />
-            <button style={{ marginTop: 8 }} onClick={loadOccupations} type="button">
-              Load occupations helper
-            </button>
-            {occList.length > 0 && (
-              <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)} style={{ marginTop: 8 }}>
-                {occList.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.id} {o.name ? `- ${o.name}` : ""}
-                  </option>
-                ))}
-              </select>
-            )}
+            <label>site_id (auto from session)</label>
+            <input value={siteId} onChange={(e) => setSiteId(e.target.value)} />
           </div>
-
           <div>
-            <label>Selected exam_session_id</label>
-            <input value={selectedSessionId} readOnly />
-            <p className="small">Temporary seat (hold) is optional, but recommended.</p>
+            <label>site_city (auto from session)</label>
+            <input value={siteCity} onChange={(e) => setSiteCity(e.target.value)} />
           </div>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={createHold} type="button">Create temporary seat (hold)</button>
-          <button onClick={bookReservation} type="button">Book reservation</button>
+          <button onClick={createHold} type="button" disabled={loading}>Create temporary seat (hold)</button>
+          <button onClick={bookReservation} type="button" disabled={loading}>Book reservation</button>
         </div>
-
-        <p className="small">
-          POST <code>/api/svp/temporary-seats</code> uses body like
-          <code>{"{"}"exam_session_id":[ID],"methodology":"in_person"{"}"}</code>.{" "}
-          POST <code>/api/svp/exam-reservations</code> uses body like
-          <code>{"{"}"exam_session_id":ID,"occupation_id":2023,"language_code":"MTDBB","site_id":null,"site_city":null,"hold_id":null,"methodology":"in_person"{"}"}</code>.
-        </p>
       </div>
 
       <div className="card">
         <h3>Output (raw)</h3>
         <pre>{out}</pre>
       </div>
+
+      {reservationRaw ? (
+        <div className="card">
+          <h3>Reservation Result</h3>
+          <pre>{JSON.stringify(reservationRaw, null, 2)}</pre>
+        </div>
+      ) : null}
     </div>
   );
 }

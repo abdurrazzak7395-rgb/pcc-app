@@ -5,7 +5,13 @@ const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
 
 function pickArray(json) {
   if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.occupations)) return json.occupations;
+  if (Array.isArray(json?.exam_sessions)) return json.exam_sessions;
+  if (Array.isArray(json?.available_dates)) return json.available_dates;
   if (Array.isArray(json?.data)) return json.data;
+  if (Array.isArray(json?.data?.occupations)) return json.data.occupations;
+  if (Array.isArray(json?.data?.exam_sessions)) return json.data.exam_sessions;
+  if (Array.isArray(json?.data?.available_dates)) return json.data.available_dates;
   if (Array.isArray(json?.items)) return json.items;
   if (Array.isArray(json?.results)) return json.results;
   return [];
@@ -20,6 +26,8 @@ export default function CreateBookingModal({ open, onClose }) {
   const [city, setCity] = useState("");
   const [examDate, setExamDate] = useState(""); // YYYY-MM-DD
   const [sessionId, setSessionId] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [siteCity, setSiteCity] = useState("");
   const [languageCode, setLanguageCode] = useState("MTDBB");
   const [methodology, setMethodology] = useState("in_person");
 
@@ -50,6 +58,36 @@ export default function CreateBookingModal({ open, onClose }) {
 
   const sessionList = useMemo(() => sessions || [], [sessions]);
   const cities = useMemo(() => uniq(sessionList.map((s) => s.city)), [sessionList]);
+  const selectedOccupation = useMemo(
+    () => occupations.find((o) => String(o?.id) === String(occupationId)) || null,
+    [occupations, occupationId]
+  );
+  const selectedSession = useMemo(
+    () => sessionList.find((s) => String(s?.id || s?.exam_session_id) === String(sessionId)) || null,
+    [sessionList, sessionId]
+  );
+
+  useEffect(() => {
+    if (!selectedOccupation) return;
+    const cid = selectedOccupation?.category_id || selectedOccupation?.category?.id;
+    if (cid) setCategoryId(String(cid));
+    const codes = (selectedOccupation?.category?.prometric_codes || []).map((p) => p?.code).filter(Boolean);
+    if (codes.length && !codes.includes(languageCode)) setLanguageCode(codes[0]);
+  }, [selectedOccupation, languageCode]);
+
+  useEffect(() => {
+    if (!selectedSession) return;
+    const sid = selectedSession?.site_id ?? selectedSession?.test_center_id ?? selectedSession?.site?.id;
+    const scity =
+      selectedSession?.site_city ??
+      selectedSession?.city ??
+      selectedSession?.site_city_name ??
+      selectedSession?.test_center_city ??
+      "";
+    setSiteId(sid == null ? "" : String(sid));
+    setSiteCity(String(scity || ""));
+    if (!city && selectedSession?.city) setCity(selectedSession.city);
+  }, [selectedSession, city]);
 
   async function loadSessions() {
     if (!city || !examDate) return setMsg("Select city and date first.");
@@ -65,7 +103,9 @@ export default function CreateBookingModal({ open, onClose }) {
       const res = await api(`/api/svp/exam-sessions?${qs}`);
       const list = pickArray(res);
       setSessions(list);
-      if (list?.[0]?.id) setSessionId(String(list[0].id));
+      if (list?.[0]?.id || list?.[0]?.exam_session_id) {
+        setSessionId(String(list[0]?.id || list[0]?.exam_session_id));
+      }
       setMsg("");
     } catch (e) {
       setMsg(JSON.stringify(e.data || e.message));
@@ -110,8 +150,8 @@ export default function CreateBookingModal({ open, onClose }) {
           exam_session_id: Number(sessionId),
           occupation_id: Number(occupationId),
           language_code: languageCode,
-          site_id: null,
-          site_city: null,
+          site_id: siteId ? Number(siteId) : null,
+          site_city: siteCity || city || null,
           hold_id: holdId,
           methodology,
         },
@@ -178,6 +218,17 @@ export default function CreateBookingModal({ open, onClose }) {
                 <option value="in_person">in_person</option>
                 <option value="remote">remote</option>
               </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label>site_id (auto)</label>
+              <input value={siteId} onChange={(e) => setSiteId(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label>site_city (auto)</label>
+              <input value={siteCity} onChange={(e) => setSiteCity(e.target.value)} />
             </div>
           </div>
 
