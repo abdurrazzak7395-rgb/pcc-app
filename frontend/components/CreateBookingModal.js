@@ -35,6 +35,9 @@ export default function CreateBookingModal({ open, onClose }) {
   const [sessions, setSessions] = useState([]);
   const [hold, setHold] = useState(null);
   const [reservation, setReservation] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentId, setPaymentId] = useState("");
+  const [paymentResult, setPaymentResult] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -148,6 +151,14 @@ export default function CreateBookingModal({ open, onClose }) {
     return x?.hold_id || x?.id || x?.data?.hold_id || x?.data?.id || null;
   }
 
+  function extractReservationId(x) {
+    return x?.reservation?.id || x?.reservation_id || x?.id || x?.data?.reservation?.id || x?.data?.reservation_id || x?.data?.id || null;
+  }
+
+  function extractPaymentId(x) {
+    return x?.payment?.id || x?.payment_id || x?.id || x?.data?.payment?.id || x?.data?.payment_id || x?.data?.id || null;
+  }
+
   async function book() {
     if (!sessionId) return setMsg("Select a session first.");
     if (!occupationId) return setMsg("Select occupation.");
@@ -170,7 +181,52 @@ export default function CreateBookingModal({ open, onClose }) {
       });
 
       setReservation(res);
-      setMsg("Booked ✅");
+      const rid = extractReservationId(res);
+      if (rid) {
+        setMsg(`Booked ✅ Reservation #${rid}`);
+      } else {
+        setMsg("Booked ✅");
+      }
+    } catch (e) {
+      setMsg(JSON.stringify(e.data || e.message));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createPaymentForReservation() {
+    const reservationId = extractReservationId(reservation);
+    if (!reservationId) return setMsg("Create reservation first.");
+    try {
+      setLoading(true);
+      setMsg("Creating payment...");
+      const body = {
+        payment: {
+          payment_method: paymentMethod,
+          payable_type: "Reservation",
+          payable_id: Number(reservationId),
+        },
+      };
+      const res = await api("/api/svp/payments", { method: "POST", body });
+      setPaymentResult(res);
+      const pid = extractPaymentId(res);
+      if (pid) setPaymentId(String(pid));
+      setMsg("Payment created.");
+    } catch (e) {
+      setMsg(JSON.stringify(e.data || e.message));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function finalizePayment() {
+    if (!paymentId) return setMsg("payment_id required.");
+    try {
+      setLoading(true);
+      setMsg("Finalizing payment...");
+      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, { method: "PUT" });
+      setPaymentResult(res);
+      setMsg("Payment finalize API called.");
     } catch (e) {
       setMsg(JSON.stringify(e.data || e.message));
     } finally {
@@ -182,6 +238,8 @@ export default function CreateBookingModal({ open, onClose }) {
     setMsg("");
     setHold(null);
     setReservation(null);
+    setPaymentId("");
+    setPaymentResult(null);
     onClose?.();
   }
 
@@ -274,11 +332,35 @@ export default function CreateBookingModal({ open, onClose }) {
             <button onClick={book} disabled={loading} style={{ flex: 1 }}>Book</button>
           </div>
 
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label>Payment Method</label>
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                <option value="card">card</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label>payment_id</label>
+              <input value={paymentId} onChange={(e) => setPaymentId(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+            <button onClick={createPaymentForReservation} disabled={loading} style={{ flex: 1 }}>Create Payment</button>
+            <button onClick={finalizePayment} disabled={loading} style={{ flex: 1 }}>Finalize Payment</button>
+          </div>
+
           {msg && <div style={styles.msg}><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg}</pre></div>}
           {reservation && (
             <div style={styles.msg}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>Reservation Response</div>
               <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(reservation, null, 2)}</pre>
+            </div>
+          )}
+          {paymentResult && (
+            <div style={styles.msg}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Payment Response</div>
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(paymentResult, null, 2)}</pre>
             </div>
           )}
         </div>

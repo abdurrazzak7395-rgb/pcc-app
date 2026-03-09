@@ -103,6 +103,14 @@ export default function ExamBooking() {
   const [sessionsRaw, setSessionsRaw] = useState(null);
   const [holdRaw, setHoldRaw] = useState(null);
   const [reservationRaw, setReservationRaw] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [payableType, setPayableType] = useState("Reservation");
+  const [payableId, setPayableId] = useState("");
+  const [paymentId, setPaymentId] = useState("");
+  const [paymentRaw, setPaymentRaw] = useState(null);
+  const [paymentStatusRaw, setPaymentStatusRaw] = useState(null);
+  const [paymentFinalizeRaw, setPaymentFinalizeRaw] = useState(null);
+  const [paymentValidateRaw, setPaymentValidateRaw] = useState(null);
 
   const occList = useMemo(() => pickArray(occupationsRaw).map(normalizeOccupation).filter((o) => o.id), [occupationsRaw]);
   const dateList = useMemo(() => uniqueBy(pickArray(availableDatesRaw).map(normalizeDateItem).filter(Boolean), (d) => d), [availableDatesRaw]);
@@ -279,6 +287,30 @@ export default function ExamBooking() {
     return json?.hold_id || json?.id || json?.data?.hold_id || json?.data?.id || null;
   }
 
+  function extractReservationId(json) {
+    return (
+      json?.reservation?.id ||
+      json?.reservation_id ||
+      json?.id ||
+      json?.data?.reservation?.id ||
+      json?.data?.reservation_id ||
+      json?.data?.id ||
+      null
+    );
+  }
+
+  function extractPaymentId(json) {
+    return (
+      json?.payment?.id ||
+      json?.payment_id ||
+      json?.id ||
+      json?.data?.payment?.id ||
+      json?.data?.payment_id ||
+      json?.data?.id ||
+      null
+    );
+  }
+
   async function bookReservation() {
     if (!selectedSessionId) return setOut("Select exam session first.");
     if (!occupationId) return setOut("Select occupation first.");
@@ -302,6 +334,76 @@ export default function ExamBooking() {
     try {
       const res = await api("/api/svp/exam-reservations", { method: "POST", body });
       setReservationRaw(res);
+      const rid = extractReservationId(res);
+      if (rid) setPayableId(String(rid));
+      setOut(JSON.stringify(res, null, 2));
+    } catch (e) {
+      setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createPayment() {
+    if (!payableId) return setOut("Reservation ID (payable_id) required for payment.");
+    setLoading(true);
+    setOut("Creating payment...");
+    try {
+      const body = {
+        payment: {
+          payment_method: paymentMethod,
+          payable_type: payableType,
+          payable_id: Number(payableId),
+        },
+      };
+      const res = await api("/api/svp/payments", { method: "POST", body });
+      setPaymentRaw(res);
+      const pid = extractPaymentId(res);
+      if (pid) setPaymentId(String(pid));
+      setOut(JSON.stringify(res, null, 2));
+    } catch (e) {
+      setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchPaymentStatus() {
+    if (!paymentId) return setOut("Payment ID required.");
+    setLoading(true);
+    setOut("Loading payment status...");
+    try {
+      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`);
+      setPaymentStatusRaw(res);
+      setOut(JSON.stringify(res, null, 2));
+    } catch (e) {
+      setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function finalizePayment() {
+    if (!paymentId) return setOut("Payment ID required.");
+    setLoading(true);
+    setOut("Finalizing payment...");
+    try {
+      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, { method: "PUT" });
+      setPaymentFinalizeRaw(res);
+      setOut(JSON.stringify(res, null, 2));
+    } catch (e) {
+      setOut(JSON.stringify(e.data || e.message, null, 2));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function validatePendingPayments() {
+    setLoading(true);
+    setOut("Validating pending payments...");
+    try {
+      const res = await api("/api/svp/payments-validate-pending");
+      setPaymentValidateRaw(res);
       setOut(JSON.stringify(res, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
@@ -471,6 +573,38 @@ export default function ExamBooking() {
       </div>
 
       <div className="card">
+        <h3>5) Live Payment</h3>
+        <div className="row">
+          <div>
+            <label>payment_method</label>
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+              <option value="card">card</option>
+            </select>
+          </div>
+          <div>
+            <label>payable_type</label>
+            <input value={payableType} onChange={(e) => setPayableType(e.target.value)} />
+          </div>
+        </div>
+        <div className="row">
+          <div>
+            <label>payable_id (reservation id)</label>
+            <input value={payableId} onChange={(e) => setPayableId(e.target.value)} />
+          </div>
+          <div>
+            <label>payment_id</label>
+            <input value={paymentId} onChange={(e) => setPaymentId(e.target.value)} />
+          </div>
+        </div>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button onClick={createPayment} type="button" disabled={loading}>Create Payment</button>
+          <button onClick={fetchPaymentStatus} type="button" disabled={loading}>Get Payment</button>
+          <button onClick={finalizePayment} type="button" disabled={loading}>Finalize Payment</button>
+          <button onClick={validatePendingPayments} type="button" disabled={loading}>Validate Pending</button>
+        </div>
+      </div>
+
+      <div className="card">
         <h3>Output (raw)</h3>
         <pre>{out}</pre>
       </div>
@@ -479,6 +613,34 @@ export default function ExamBooking() {
         <div className="card">
           <h3>Reservation Result</h3>
           <pre>{JSON.stringify(reservationRaw, null, 2)}</pre>
+        </div>
+      ) : null}
+
+      {paymentRaw ? (
+        <div className="card">
+          <h3>Payment Create Result</h3>
+          <pre>{JSON.stringify(paymentRaw, null, 2)}</pre>
+        </div>
+      ) : null}
+
+      {paymentStatusRaw ? (
+        <div className="card">
+          <h3>Payment Status</h3>
+          <pre>{JSON.stringify(paymentStatusRaw, null, 2)}</pre>
+        </div>
+      ) : null}
+
+      {paymentFinalizeRaw ? (
+        <div className="card">
+          <h3>Payment Finalize Result</h3>
+          <pre>{JSON.stringify(paymentFinalizeRaw, null, 2)}</pre>
+        </div>
+      ) : null}
+
+      {paymentValidateRaw ? (
+        <div className="card">
+          <h3>Pending Payment Validation</h3>
+          <pre>{JSON.stringify(paymentValidateRaw, null, 2)}</pre>
         </div>
       ) : null}
     </div>

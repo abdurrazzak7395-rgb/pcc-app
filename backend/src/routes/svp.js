@@ -100,6 +100,32 @@ router.get('/payments-validate-pending', requireAuth, async (req, res, next) => 
   } catch (e) { next(e); }
 });
 
+router.post('/payments', requireAuth, async (req, res, next) => {
+  try {
+    const token = await getSvpTokenFromSession(req);
+    const data = await svpRequest('/api/v1/individual_labor_space/payments', { method: 'POST', token, body: req.body });
+    res.json(data);
+  } catch (e) { next(e); }
+});
+
+router.get('/payments/:id', requireAuth, async (req, res, next) => {
+  try {
+    const token = await getSvpTokenFromSession(req);
+    const paymentId = encodeURIComponent(req.params.id);
+    const data = await svpRequest(`/api/v1/individual_labor_space/payments/${paymentId}`, { token });
+    res.json(data);
+  } catch (e) { next(e); }
+});
+
+router.put('/payments/:id', requireAuth, async (req, res, next) => {
+  try {
+    const token = await getSvpTokenFromSession(req);
+    const paymentId = encodeURIComponent(req.params.id);
+    const data = await svpRequest(`/api/v1/individual_labor_space/payments/${paymentId}`, { method: 'PUT', token, body: req.body });
+    res.json(data);
+  } catch (e) { next(e); }
+});
+
 router.get('/feature-flags', requireAuth, async (req, res, next) => {
   try {
     const token = await getSvpTokenFromSession(req);
