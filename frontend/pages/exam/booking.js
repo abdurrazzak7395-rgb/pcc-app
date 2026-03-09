@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api } from "../../lib/api";
+import { api, apiWithMeta } from "../../lib/api";
 
 function pickArray(json) {
   if (Array.isArray(json)) return json;
@@ -165,6 +165,13 @@ export default function ExamBooking() {
   const [paymentStatusRaw, setPaymentStatusRaw] = useState(null);
   const [paymentFinalizeRaw, setPaymentFinalizeRaw] = useState(null);
   const [paymentValidateRaw, setPaymentValidateRaw] = useState(null);
+  const [statusCodes, setStatusCodes] = useState({
+    reservation: null,
+    paymentCreate: null,
+    paymentGet: null,
+    paymentFinalize: null,
+    validatePending: null,
+  });
 
   const occList = useMemo(
     () => pickArray(occupationsRaw).map(normalizeOccupation).filter((o) => o.id),
@@ -395,11 +402,12 @@ export default function ExamBooking() {
         hold_id: holdRaw ? extractHoldId(holdRaw) : null,
         methodology,
       };
-      const res = await api("/api/svp/exam-reservations", { method: "POST", body });
-      setReservationRaw(res);
-      const rid = extractReservationId(res);
+      const { status, data } = await apiWithMeta("/api/svp/exam-reservations", { method: "POST", body });
+      setStatusCodes((s) => ({ ...s, reservation: status }));
+      setReservationRaw(data);
+      const rid = extractReservationId(data);
       if (rid) setPayableId(String(rid));
-      setOut(JSON.stringify(res, null, 2));
+      setOut(JSON.stringify(data, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     } finally {
@@ -419,11 +427,12 @@ export default function ExamBooking() {
           payable_id: Number(payableId),
         },
       };
-      const res = await api("/api/svp/payments", { method: "POST", body });
-      setPaymentRaw(res);
-      const pid = extractPaymentId(res);
+      const { status, data } = await apiWithMeta("/api/svp/payments", { method: "POST", body });
+      setStatusCodes((s) => ({ ...s, paymentCreate: status }));
+      setPaymentRaw(data);
+      const pid = extractPaymentId(data);
       if (pid) setPaymentId(String(pid));
-      const redirectUrl = extractRedirectUrl(res);
+      const redirectUrl = extractRedirectUrl(data);
       if (redirectUrl) {
         setPaymentRedirectUrl(redirectUrl);
         const parsed = parsePaymentInfoFromUrl(redirectUrl);
@@ -431,7 +440,10 @@ export default function ExamBooking() {
         if (!paymentGatewayId && parsed.id) setPaymentGatewayId(parsed.id);
         if (!paymentResourcePath && parsed.resourcePath) setPaymentResourcePath(parsed.resourcePath);
       }
-      setOut(JSON.stringify(res, null, 2));
+      setOut(JSON.stringify(data, null, 2));
+      if (redirectUrl && typeof window !== "undefined") {
+        window.open(redirectUrl, "_blank", "noopener,noreferrer");
+      }
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     } finally {
@@ -444,9 +456,10 @@ export default function ExamBooking() {
     setLoading(true);
     setOut("Loading payment status...");
     try {
-      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`);
-      setPaymentStatusRaw(res);
-      setOut(JSON.stringify(res, null, 2));
+      const { status, data } = await apiWithMeta(`/api/svp/payments/${encodeURIComponent(paymentId)}`);
+      setStatusCodes((s) => ({ ...s, paymentGet: status }));
+      setPaymentStatusRaw(data);
+      setOut(JSON.stringify(data, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     } finally {
@@ -460,9 +473,10 @@ export default function ExamBooking() {
     setOut("Finalizing payment...");
     try {
       // Postman flow uses PUT with no body.
-      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, { method: "PUT" });
-      setPaymentFinalizeRaw(res);
-      setOut(JSON.stringify(res, null, 2));
+      const { status, data } = await apiWithMeta(`/api/svp/payments/${encodeURIComponent(paymentId)}`, { method: "PUT" });
+      setStatusCodes((s) => ({ ...s, paymentFinalize: status }));
+      setPaymentFinalizeRaw(data);
+      setOut(JSON.stringify(data, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     } finally {
@@ -474,9 +488,10 @@ export default function ExamBooking() {
     setLoading(true);
     setOut("Validating pending payments...");
     try {
-      const res = await api("/api/svp/payments-validate-pending");
-      setPaymentValidateRaw(res);
-      setOut(JSON.stringify(res, null, 2));
+      const { status, data } = await apiWithMeta("/api/svp/payments-validate-pending");
+      setStatusCodes((s) => ({ ...s, validatePending: status }));
+      setPaymentValidateRaw(data);
+      setOut(JSON.stringify(data, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     } finally {
@@ -682,6 +697,9 @@ export default function ExamBooking() {
 
       <div className="card">
         <h3>5) Live Payment</h3>
+        <p className="small">
+          HTTP Status: reservation={statusCodes.reservation ?? "-"}, create={statusCodes.paymentCreate ?? "-"}, get={statusCodes.paymentGet ?? "-"}, finalize={statusCodes.paymentFinalize ?? "-"}, validate={statusCodes.validatePending ?? "-"}
+        </p>
         <div className="row">
           <div>
             <label>payment_method</label>
