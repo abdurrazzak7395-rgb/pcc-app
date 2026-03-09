@@ -90,12 +90,36 @@ function extractPaymentId(json) {
   return (
     json?.payment?.id ||
     json?.payment_id ||
-    json?.id ||
     json?.data?.payment?.id ||
     json?.data?.payment_id ||
+    json?.payment?.payment_id ||
     json?.data?.id ||
+    json?.id ||
     null
   );
+}
+
+function extractRedirectUrl(json) {
+  return (
+    json?.payment?.redirect_url ||
+    json?.redirect_url ||
+    json?.data?.payment?.redirect_url ||
+    json?.data?.redirect_url ||
+    null
+  );
+}
+
+function parsePaymentInfoFromUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return {};
+  try {
+    const url = new URL(rawUrl);
+    const paymentId = url.searchParams.get("paymentId") || "";
+    const id = url.searchParams.get("id") || "";
+    const resourcePath = url.searchParams.get("resourcePath") || "";
+    return { paymentId, id, resourcePath };
+  } catch {
+    return {};
+  }
 }
 
 export default function ExamBooking() {
@@ -136,6 +160,7 @@ export default function ExamBooking() {
   const [paymentId, setPaymentId] = useState("");
   const [paymentGatewayId, setPaymentGatewayId] = useState("");
   const [paymentResourcePath, setPaymentResourcePath] = useState("");
+  const [paymentRedirectUrl, setPaymentRedirectUrl] = useState("");
   const [paymentRaw, setPaymentRaw] = useState(null);
   const [paymentStatusRaw, setPaymentStatusRaw] = useState(null);
   const [paymentFinalizeRaw, setPaymentFinalizeRaw] = useState(null);
@@ -398,6 +423,14 @@ export default function ExamBooking() {
       setPaymentRaw(res);
       const pid = extractPaymentId(res);
       if (pid) setPaymentId(String(pid));
+      const redirectUrl = extractRedirectUrl(res);
+      if (redirectUrl) {
+        setPaymentRedirectUrl(redirectUrl);
+        const parsed = parsePaymentInfoFromUrl(redirectUrl);
+        if (!paymentId && parsed.paymentId) setPaymentId(parsed.paymentId);
+        if (!paymentGatewayId && parsed.id) setPaymentGatewayId(parsed.id);
+        if (!paymentResourcePath && parsed.resourcePath) setPaymentResourcePath(parsed.resourcePath);
+      }
       setOut(JSON.stringify(res, null, 2));
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
@@ -426,13 +459,8 @@ export default function ExamBooking() {
     setLoading(true);
     setOut("Finalizing payment...");
     try {
-      const body = {};
-      if (paymentGatewayId) body.id = paymentGatewayId;
-      if (paymentResourcePath) body.resourcePath = paymentResourcePath;
-      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, {
-        method: "PUT",
-        body: Object.keys(body).length ? body : undefined,
-      });
+      // Postman flow uses PUT with no body.
+      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, { method: "PUT" });
       setPaymentFinalizeRaw(res);
       setOut(JSON.stringify(res, null, 2));
     } catch (e) {
@@ -686,6 +714,11 @@ export default function ExamBooking() {
             <input value={paymentResourcePath} onChange={(e) => setPaymentResourcePath(e.target.value)} />
           </div>
         </div>
+        {paymentRedirectUrl ? (
+          <p className="small">
+            Redirect URL: <a href={paymentRedirectUrl} target="_blank" rel="noreferrer">{paymentRedirectUrl}</a>
+          </p>
+        ) : null}
         <div className="row" style={{ marginTop: 12 }}>
           <button onClick={createPayment} type="button" disabled={loading}>
             Create Payment
