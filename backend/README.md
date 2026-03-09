@@ -21,6 +21,19 @@
 
 Backend runs at: http://localhost:4000
 
+## Run Live (Direct)
+Use these env values in `backend/.env`:
+- `NODE_ENV=production`
+- `APP_NAME=Your App Name`
+- `PORT=4000` (or your server port)
+- `CORS_ORIGINS=https://your-frontend-domain`
+
+Start in production mode:
+- `npm start`
+
+Health check:
+- `GET /health` -> returns `ok`, `app`, `env`
+
 ## API
 - POST /api/auth/login
 - POST /api/auth/otp-verify

@@ -10,6 +10,7 @@ import { svpRouter } from './routes/svp.js';
 import { meRouter } from './routes/me.js';
 
 const app = express();
+const appName = process.env.APP_NAME || 'SVP Backend API';
 
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
@@ -28,7 +29,11 @@ app.use(cors({
 // Rate limit auth endpoints
 app.use('/api/auth', rateLimit({ windowMs: 60_000, max: 30 }));
 
-app.get('/health', (_, res) => res.json({ ok: true }));
+app.get('/health', (_, res) => res.json({
+  ok: true,
+  app: appName,
+  env: process.env.NODE_ENV || 'development',
+}));
 
 app.use('/api/auth', authRouter);
 app.use('/api', meRouter);
@@ -44,4 +49,4 @@ app.use((err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT || 4000);
-app.listen(port, () => console.log(`Backend listening on http://localhost:${port}`));
+app.listen(port, () => console.log(`${appName} listening on http://localhost:${port}`));
