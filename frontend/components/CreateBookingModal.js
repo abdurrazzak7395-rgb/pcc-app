@@ -22,6 +22,9 @@ export default function CreateBookingModal({ open, onClose }) {
   const [msg, setMsg] = useState("");
 
   const [categoryId, setCategoryId] = useState("56");
+  const [occupationPerPage, setOccupationPerPage] = useState("194");
+  const [occupationPage, setOccupationPage] = useState("1");
+  const [occupationName, setOccupationName] = useState("");
   const [occupationId, setOccupationId] = useState("");
   const [city, setCity] = useState("");
   const [examDate, setExamDate] = useState(""); // YYYY-MM-DD
@@ -45,7 +48,12 @@ export default function CreateBookingModal({ open, onClose }) {
       try {
         setLoading(true);
         setMsg("Loading occupations...");
-        const res = await api("/api/svp/occupations");
+        const qs = new URLSearchParams({
+          per_page: occupationPerPage,
+          page: occupationPage,
+          name: occupationName,
+        }).toString();
+        const res = await api(`/api/svp/occupations?${qs}`);
         const list = pickArray(res);
         setOccupations(list);
         if (!occupationId && list?.[0]?.id) setOccupationId(String(list[0].id));
@@ -57,7 +65,7 @@ export default function CreateBookingModal({ open, onClose }) {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, occupationPerPage, occupationPage, occupationName]);
 
   const sessionList = useMemo(() => sessions || [], [sessions]);
   const cities = useMemo(
@@ -258,6 +266,20 @@ export default function CreateBookingModal({ open, onClose }) {
           <div style={styles.fakeSelect}>Using current logged-in SVP session</div>
 
           <label>Occupation *</label>
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label>per_page</label>
+              <input value={occupationPerPage} onChange={(e) => setOccupationPerPage(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label>page</label>
+              <input value={occupationPage} onChange={(e) => setOccupationPage(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label>name</label>
+              <input value={occupationName} onChange={(e) => setOccupationName(e.target.value)} />
+            </div>
+          </div>
           <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)}>
             {occupations.map((o) => (
               <option key={o.id} value={o.id}>

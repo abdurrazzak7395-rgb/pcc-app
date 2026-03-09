@@ -1,0 +1,55 @@
+{
+  "occupations_response": {
+    "occupations": [
+      {
+        "id": 747,
+        "name": "Agricultural equipment mechanic",
+        "category_id": 28,
+        "category_name_en": "Mechanical",
+        "category": {
+          "id": 28,
+          "english_name": "Mechanical",
+          "prometric_codes": [
+            { "code": "EMCEE", "english_name": "English", "language_code": "en" },
+            { "code": "EMCAA", "english_name": "Arabic", "language_code": "ar" }
+          ]
+        }
+      }
+    ],
+    "pagination": {
+      "current": 1,
+      "per_page": 194,
+      "pages": 1,
+      "count": 194
+    }
+  },
+  "exam_sessions_response": {
+    "exam_sessions": [
+      {
+        "id": 1055182,
+        "city": "Mymensingh",
+        "city_id": 12,
+        "site_id": 3001,
+        "site_city_name": "Mymensingh",
+        "test_center_name": "Main Test Center",
+        "start_at": "2026-03-15T09:00:00+06:00"
+      }
+    ]
+  },
+  "exam_reservation_request": {
+    "exam_session_id": 1055182,
+    "occupation_id": 747,
+    "language_code": "EMCEE",
+    "site_id": 3001,
+    "site_city": "Mymensingh",
+    "hold_id": null,
+    "methodology": "in_person"
+  },
+  "payment_create_request": {
+    "payment": {
+      "payment_method": "card",
+      "payable_type": "Reservation",
+      "payable_id": 1670176
+    }
+  }
+}

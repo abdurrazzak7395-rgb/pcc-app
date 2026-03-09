@@ -83,6 +83,9 @@ export default function ExamBooking() {
   const [loading, setLoading] = useState(false);
 
   const [categoryId, setCategoryId] = useState("56");
+  const [occupationPerPage, setOccupationPerPage] = useState("194");
+  const [occupationPage, setOccupationPage] = useState("1");
+  const [occupationName, setOccupationName] = useState("");
   const [startDateFrom, setStartDateFrom] = useState("");
   const [perPage, setPerPage] = useState("1000");
   const [availableSeats, setAvailableSeats] = useState("greater_than::0");
@@ -158,7 +161,12 @@ export default function ExamBooking() {
     setLoading(true);
     setOut("Loading occupations...");
     try {
-      const res = await api("/api/svp/occupations");
+      const qs = new URLSearchParams({
+        per_page: occupationPerPage,
+        page: occupationPage,
+        name: occupationName,
+      }).toString();
+      const res = await api(`/api/svp/occupations?${qs}`);
       setOccupationsRaw(res);
       const list = pickArray(res).map(normalizeOccupation).filter((o) => o.id);
       if (!occupationId && list[0]?.id) setOccupationId(String(list[0].id));
@@ -429,6 +437,20 @@ export default function ExamBooking() {
         <h3>1) Occupation + Category</h3>
         <div className="row">
           <div>
+            <label>occupation per_page</label>
+            <input value={occupationPerPage} onChange={(e) => setOccupationPerPage(e.target.value)} />
+          </div>
+          <div>
+            <label>occupation page</label>
+            <input value={occupationPage} onChange={(e) => setOccupationPage(e.target.value)} />
+          </div>
+          <div>
+            <label>occupation name</label>
+            <input value={occupationName} onChange={(e) => setOccupationName(e.target.value)} />
+          </div>
+        </div>
+        <div className="row">
+          <div>
             <label>Occupation</label>
             <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)}>
               {occList.map((o) => (
@@ -445,6 +467,9 @@ export default function ExamBooking() {
           </div>
         </div>
         <button type="button" onClick={loadOccupations} disabled={loading}>Reload Occupations</button>
+        <p className="small">
+          API: <code>/api/svp/occupations?per_page={occupationPerPage || "194"}&page={occupationPage || "1"}&name={occupationName || ""}</code>
+        </p>
       </div>
 
       <div className="card">

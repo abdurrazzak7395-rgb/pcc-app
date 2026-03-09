@@ -26,7 +26,9 @@ router.get('/permissions', requireAuth, async (req, res, next) => {
 router.get('/occupations', requireAuth, async (req, res, next) => {
   try {
     const token = await getSvpTokenFromSession(req);
-    const data = await svpRequest('/api/v1/individual_labor_space/occupations', { token });
+    const qp = new URLSearchParams(req.query).toString();
+    const path = `/api/v1/individual_labor_space/occupations${qp ? `?${qp}` : ''}`;
+    const data = await svpRequest(path, { token });
     res.json(data);
   } catch (e) { next(e); }
 });
