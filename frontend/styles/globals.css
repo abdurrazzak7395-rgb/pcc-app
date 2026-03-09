@@ -1,0 +1,13 @@
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 0; }
+.container { max-width: 900px; margin: 0 auto; padding: 24px; }
+.card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+input, button { padding: 10px; font-size: 14px; }
+input { width: 100%; margin: 6px 0 12px; }
+button { cursor: pointer; }
+.row { display: flex; gap: 12px; }
+.row > * { flex: 1; }
+pre { white-space: pre-wrap; word-break: break-word; }
+.small { color: #666; font-size: 12px; }
+
+select{padding:10px;font-size:14px;border-radius:12px;border:1px solid #333;background:#0b1220;color:#fff;}
+label{font-weight:600;}

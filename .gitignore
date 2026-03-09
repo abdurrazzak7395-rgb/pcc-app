@@ -1,0 +1,13 @@
+/.vscode
+.fake
+
+# dependencies
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+
+# environment files
+.env
+.env.*
+!.env.example
