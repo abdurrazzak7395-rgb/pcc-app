@@ -43,8 +43,10 @@ function normalizeOccupation(o) {
 
 function normalizeDateItem(item) {
   const date = item?.exam_date || item?.date || item?.day || item?.start_at_date || "";
-  if (typeof date !== "string" || !date.match(/^\d{4}-\d{2}-\d{2}$/)) return null;
-  return date;
+  if (typeof date !== "string") return null;
+  if (date.match(/^\d{4}-\d{2}-\d{2}$/)) return date;
+  if (date.match(/^\d{4}-\d{2}-\d{2}T/)) return date.slice(0, 10);
+  return null;
 }
 
 function normalizeSession(s) {
@@ -104,6 +106,7 @@ export default function ExamBooking() {
   const [availableDatesRaw, setAvailableDatesRaw] = useState(null);
   const [occupationsRaw, setOccupationsRaw] = useState(null);
   const [sessionsRaw, setSessionsRaw] = useState(null);
+  const [constraintsRaw, setConstraintsRaw] = useState(null);
   const [holdRaw, setHoldRaw] = useState(null);
   const [reservationRaw, setReservationRaw] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("card");
@@ -118,7 +121,32 @@ export default function ExamBooking() {
   const occList = useMemo(() => pickArray(occupationsRaw).map(normalizeOccupation).filter((o) => o.id), [occupationsRaw]);
   const dateList = useMemo(() => uniqueBy(pickArray(availableDatesRaw).map(normalizeDateItem).filter(Boolean), (d) => d), [availableDatesRaw]);
   const sessionList = useMemo(() => pickArray(sessionsRaw).map(normalizeSession).filter((s) => s.id), [sessionsRaw]);
-  const cityOptions = useMemo(() => uniqueBy(sessionList, (s) => `${s.cityName}::${s.cityId}`), [sessionList]);
+  const cityOptionsFromSessions = useMemo(() => uniqueBy(sessionList, (s) => `${s.cityName}::${s.cityId}`), [sessionList]);
+  const cityOptionsFromConstraints = useMemo(() => {
+    const c = constraintsRaw || {};
+    const rawCities =
+      c?.cities ||
+      c?.city_options ||
+      c?.test_cities ||
+      c?.locations ||
+      c?.data?.cities ||
+      c?.data?.city_options ||
+      [];
+    const normalized = (Array.isArray(rawCities) ? rawCities : [])
+      .map((x) => {
+        if (typeof x === "string") return { cityName: x, cityId: "" };
+        return {
+          cityName: String(x?.name || x?.city || x?.site_city_name || ""),
+          cityId: x?.id == null ? "" : String(x.id),
+        };
+      })
+      .filter((x) => x.cityName);
+    return uniqueBy(normalized, (x) => `${x.cityName}::${x.cityId}`);
+  }, [constraintsRaw]);
+  const cityOptions = useMemo(
+    () => uniqueBy([...cityOptionsFromConstraints, ...cityOptionsFromSessions], (s) => `${s.cityName}::${s.cityId}`),
+    [cityOptionsFromConstraints, cityOptionsFromSessions]
+  );
 
   const selectedOccupation = useMemo(
     () => occList.find((o) => String(o.id) === String(occupationId)) || null,
@@ -136,6 +164,7 @@ export default function ExamBooking() {
       return;
     }
     loadOccupations();
+    loadExamConstraints();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -208,51 +237,19 @@ export default function ExamBooking() {
   const loadExamSessions = useCallback(async (e) => {
     e?.preventDefault?.();
     if (!examDate) return setOut("Select exam date first.");
+    const cityToUse = city || cityOptions[0]?.cityName || "";
+    if (!cityToUse) return setOut("Select city first (required by API).");
     setLoading(true);
     setOut("Loading exam sessions...");
 
-    // Try with selected city first (if available), then fallback without city.
-    const attempts = city ? [city, ""] : ["", city];
-    let lastErr = null;
-    let pickedRes = null;
-    let pickedList = [];
-
     try {
-      for (const cityAttempt of attempts) {
-        const query = {
-          category_id: categoryId,
-          exam_date: examDate,
-        };
-        if (cityAttempt) query.city = cityAttempt;
-
-        try {
-          const qs = new URLSearchParams(query).toString();
-          const res = await api(`/api/svp/exam-sessions?${qs}`);
-          const list = pickArray(res).map(normalizeSession).filter((s) => s.id);
-
-          if (list.length > 0) {
-            pickedRes = res;
-            pickedList = list;
-            break;
-          }
-
-          // Keep the first successful empty response in case nothing else returns rows.
-          if (!pickedRes) {
-            pickedRes = res;
-            pickedList = list;
-          }
-        } catch (err) {
-          lastErr = err;
-        }
-      }
-
-      if (!pickedRes && lastErr) throw lastErr;
-      if (!pickedRes) {
-        setSessionsRaw(null);
-        setOut("No sessions response from API.");
-        return;
-      }
-
+      const qs = new URLSearchParams({
+        category_id: categoryId,
+        city: cityToUse,
+        exam_date: examDate,
+      }).toString();
+      const pickedRes = await api(`/api/svp/exam-sessions?${qs}`);
+      const pickedList = pickArray(pickedRes).map(normalizeSession).filter((s) => s.id);
       setSessionsRaw(pickedRes);
       if (pickedList[0]) {
         const first = pickedList[0];
@@ -271,7 +268,7 @@ export default function ExamBooking() {
     } finally {
       setLoading(false);
     }
-  }, [categoryId, city, cityId, examDate]);
+  }, [categoryId, city, cityId, cityOptions, examDate]);
 
   async function createHold() {
     if (!selectedSessionId) return setOut("Select exam session first.");
@@ -671,3 +668,11 @@ export default function ExamBooking() {
     </div>
   );
 }
+  async function loadExamConstraints() {
+    try {
+      const res = await api("/api/svp/exam-constraints");
+      setConstraintsRaw(res);
+    } catch {
+      // Keep UI working even if constraints endpoint fails.
+    }
+  }
