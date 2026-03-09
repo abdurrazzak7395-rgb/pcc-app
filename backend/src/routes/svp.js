@@ -114,7 +114,9 @@ router.get('/payments/:id', requireAuth, async (req, res, next) => {
   try {
     const token = await getSvpTokenFromSession(req);
     const paymentId = encodeURIComponent(req.params.id);
-    const data = await svpRequest(`/api/v1/individual_labor_space/payments/${paymentId}`, { token });
+    const qp = new URLSearchParams(req.query).toString();
+    const path = `/api/v1/individual_labor_space/payments/${paymentId}${qp ? `?${qp}` : ''}`;
+    const data = await svpRequest(path, { token });
     res.json(data);
   } catch (e) { next(e); }
 });
@@ -123,7 +125,9 @@ router.put('/payments/:id', requireAuth, async (req, res, next) => {
   try {
     const token = await getSvpTokenFromSession(req);
     const paymentId = encodeURIComponent(req.params.id);
-    const data = await svpRequest(`/api/v1/individual_labor_space/payments/${paymentId}`, { method: 'PUT', token, body: req.body });
+    const qp = new URLSearchParams(req.query).toString();
+    const path = `/api/v1/individual_labor_space/payments/${paymentId}${qp ? `?${qp}` : ''}`;
+    const data = await svpRequest(path, { method: 'PUT', token, body: req.body });
     res.json(data);
   } catch (e) { next(e); }
 });

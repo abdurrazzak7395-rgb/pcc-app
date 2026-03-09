@@ -28,16 +28,18 @@ function uniqueBy(arr, keyFn) {
 
 function normalizeOccupation(o) {
   const categoryId = o?.category_id ?? o?.category?.id ?? "";
-  const languageCodes = (o?.category?.prometric_codes || [])
-    .map((p) => p?.code)
-    .filter(Boolean);
+  const languageCodes = (o?.category?.prometric_codes || []).map((p) => p?.code).filter(Boolean);
   return {
     id: o?.id,
     name: o?.name || o?.english_name || o?.arabic_name || `Occupation #${o?.id}`,
     categoryId: String(categoryId || ""),
-    categoryName: o?.category_name_en || o?.category?.english_name || o?.category_name_ar || o?.category?.arabic_name || "",
+    categoryName:
+      o?.category_name_en ||
+      o?.category?.english_name ||
+      o?.category_name_ar ||
+      o?.category?.arabic_name ||
+      "",
     languageCodes,
-    raw: o,
   };
 }
 
@@ -51,33 +53,49 @@ function normalizeDateItem(item) {
 
 function normalizeSession(s) {
   const id = s?.id || s?.exam_session_id || null;
-  const cityName =
-    s?.city ||
-    s?.site_city_name ||
-    s?.test_center_city ||
-    s?.site_city?.name ||
-    "";
-  const cityId =
-    s?.city_id ??
-    s?.site_city_id ??
-    s?.site_city?.id ??
-    null;
-  const siteId =
-    s?.site_id ??
-    s?.test_center_id ??
-    s?.site?.id ??
-    null;
-  const startAt = s?.start_at || s?.start_time || "";
+  const cityName = s?.city || s?.site_city_name || s?.test_center_city || s?.site_city?.name || "";
+  const cityId = s?.city_id ?? s?.site_city_id ?? s?.site_city?.id ?? null;
+  const siteId = s?.site_id ?? s?.test_center_id ?? s?.site?.id ?? null;
   const testCenterName = s?.test_center_name || s?.site_name || s?.site?.name || "";
+  const testCenterId = s?.test_center_id ?? s?.site_id ?? s?.site?.id ?? null;
+  const startAt = s?.start_at || s?.start_time || "";
   return {
     id: id ? String(id) : "",
     cityName: String(cityName || ""),
     cityId: cityId == null ? "" : String(cityId),
     siteId: siteId == null ? "" : String(siteId),
-    startAt: String(startAt || ""),
     testCenterName: String(testCenterName || ""),
-    raw: s,
+    testCenterId: testCenterId == null ? "" : String(testCenterId),
+    startAt: String(startAt || ""),
   };
+}
+
+function extractHoldId(json) {
+  return json?.hold_id || json?.id || json?.data?.hold_id || json?.data?.id || null;
+}
+
+function extractReservationId(json) {
+  return (
+    json?.reservation?.id ||
+    json?.reservation_id ||
+    json?.id ||
+    json?.data?.reservation?.id ||
+    json?.data?.reservation_id ||
+    json?.data?.id ||
+    null
+  );
+}
+
+function extractPaymentId(json) {
+  return (
+    json?.payment?.id ||
+    json?.payment_id ||
+    json?.id ||
+    json?.data?.payment?.id ||
+    json?.data?.payment_id ||
+    json?.data?.id ||
+    null
+  );
 }
 
 export default function ExamBooking() {
@@ -88,6 +106,7 @@ export default function ExamBooking() {
   const [occupationPerPage, setOccupationPerPage] = useState("194");
   const [occupationPage, setOccupationPage] = useState("1");
   const [occupationName, setOccupationName] = useState("");
+
   const [startDateFrom, setStartDateFrom] = useState("");
   const [perPage, setPerPage] = useState("1000");
   const [availableSeats, setAvailableSeats] = useState("greater_than::0");
@@ -97,6 +116,7 @@ export default function ExamBooking() {
   const [city, setCity] = useState("");
   const [cityId, setCityId] = useState("");
   const [examDate, setExamDate] = useState("");
+  const [selectedTestCenterId, setSelectedTestCenterId] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [siteId, setSiteId] = useState("");
   const [siteCity, setSiteCity] = useState("");
@@ -105,23 +125,35 @@ export default function ExamBooking() {
 
   const [availableDatesRaw, setAvailableDatesRaw] = useState(null);
   const [occupationsRaw, setOccupationsRaw] = useState(null);
-  const [sessionsRaw, setSessionsRaw] = useState(null);
   const [constraintsRaw, setConstraintsRaw] = useState(null);
+  const [sessionsRaw, setSessionsRaw] = useState(null);
   const [holdRaw, setHoldRaw] = useState(null);
   const [reservationRaw, setReservationRaw] = useState(null);
+
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [payableType, setPayableType] = useState("Reservation");
   const [payableId, setPayableId] = useState("");
   const [paymentId, setPaymentId] = useState("");
+  const [paymentGatewayId, setPaymentGatewayId] = useState("");
+  const [paymentResourcePath, setPaymentResourcePath] = useState("");
   const [paymentRaw, setPaymentRaw] = useState(null);
   const [paymentStatusRaw, setPaymentStatusRaw] = useState(null);
   const [paymentFinalizeRaw, setPaymentFinalizeRaw] = useState(null);
   const [paymentValidateRaw, setPaymentValidateRaw] = useState(null);
 
-  const occList = useMemo(() => pickArray(occupationsRaw).map(normalizeOccupation).filter((o) => o.id), [occupationsRaw]);
-  const dateList = useMemo(() => uniqueBy(pickArray(availableDatesRaw).map(normalizeDateItem).filter(Boolean), (d) => d), [availableDatesRaw]);
-  const sessionList = useMemo(() => pickArray(sessionsRaw).map(normalizeSession).filter((s) => s.id), [sessionsRaw]);
-  const cityOptionsFromSessions = useMemo(() => uniqueBy(sessionList, (s) => `${s.cityName}::${s.cityId}`), [sessionList]);
+  const occList = useMemo(
+    () => pickArray(occupationsRaw).map(normalizeOccupation).filter((o) => o.id),
+    [occupationsRaw]
+  );
+  const dateList = useMemo(
+    () => uniqueBy(pickArray(availableDatesRaw).map(normalizeDateItem).filter(Boolean), (d) => d),
+    [availableDatesRaw]
+  );
+  const sessionList = useMemo(
+    () => pickArray(sessionsRaw).map(normalizeSession).filter((s) => s.id),
+    [sessionsRaw]
+  );
+
   const cityOptionsFromConstraints = useMemo(() => {
     const c = constraintsRaw || {};
     const rawCities =
@@ -143,10 +175,29 @@ export default function ExamBooking() {
       .filter((x) => x.cityName);
     return uniqueBy(normalized, (x) => `${x.cityName}::${x.cityId}`);
   }, [constraintsRaw]);
+
+  const cityOptionsFromSessions = useMemo(
+    () => uniqueBy(sessionList, (s) => `${s.cityName}::${s.cityId}`),
+    [sessionList]
+  );
+
   const cityOptions = useMemo(
-    () => uniqueBy([...cityOptionsFromConstraints, ...cityOptionsFromSessions], (s) => `${s.cityName}::${s.cityId}`),
+    () => uniqueBy([...cityOptionsFromConstraints, ...cityOptionsFromSessions], (x) => `${x.cityName}::${x.cityId}`),
     [cityOptionsFromConstraints, cityOptionsFromSessions]
   );
+
+  const testCenterOptions = useMemo(() => {
+    const all = sessionList.map((s) => ({
+      id: s.testCenterId || s.siteId,
+      name: s.testCenterName || `Center ${s.testCenterId || s.siteId}`,
+    }));
+    return uniqueBy(all.filter((x) => x.id), (x) => x.id);
+  }, [sessionList]);
+
+  const filteredSessions = useMemo(() => {
+    if (!selectedTestCenterId) return sessionList;
+    return sessionList.filter((s) => (s.testCenterId || s.siteId) === selectedTestCenterId);
+  }, [sessionList, selectedTestCenterId]);
 
   const selectedOccupation = useMemo(
     () => occList.find((o) => String(o.id) === String(occupationId)) || null,
@@ -184,7 +235,23 @@ export default function ExamBooking() {
     setSiteCity(selectedSession.cityName || "");
     setCity(selectedSession.cityName || city);
     setCityId(selectedSession.cityId || "");
-  }, [selectedSession, city]);
+    setSelectedTestCenterId(selectedSession.testCenterId || selectedSession.siteId || selectedTestCenterId);
+  }, [selectedSession, city, selectedTestCenterId]);
+
+  useEffect(() => {
+    if (!selectedTestCenterId || filteredSessions.length === 0) return;
+    const exists = filteredSessions.some((s) => s.id === selectedSessionId);
+    if (!exists) setSelectedSessionId(filteredSessions[0].id);
+  }, [selectedTestCenterId, filteredSessions, selectedSessionId]);
+
+  async function loadExamConstraints() {
+    try {
+      const res = await api("/api/svp/exam-constraints");
+      setConstraintsRaw(res);
+    } catch {
+      // keep flow usable even if constraints fail
+    }
+  }
 
   async function loadOccupations() {
     setLoading(true);
@@ -220,10 +287,8 @@ export default function ExamBooking() {
         available_seats: availableSeats,
         status,
       }).toString();
-
       const res = await api(`/api/svp/available-dates?${qs}`);
       setAvailableDatesRaw(res);
-
       const dates = uniqueBy(pickArray(res).map(normalizeDateItem).filter(Boolean), (d) => d);
       if (!examDate && dates[0]) setExamDate(dates[0]);
       setOut(JSON.stringify(res, null, 2));
@@ -234,41 +299,42 @@ export default function ExamBooking() {
     }
   }
 
-  const loadExamSessions = useCallback(async (e) => {
-    e?.preventDefault?.();
-    if (!examDate) return setOut("Select exam date first.");
-    const cityToUse = city || cityOptions[0]?.cityName || "";
-    if (!cityToUse) return setOut("Select city first (required by API).");
-    setLoading(true);
-    setOut("Loading exam sessions...");
+  const loadExamSessions = useCallback(
+    async (e) => {
+      e?.preventDefault?.();
+      if (!examDate) return setOut("Select exam date first.");
+      const cityToUse = city || cityOptions[0]?.cityName || "";
+      if (!cityToUse) return setOut("Select city first (required by API).");
 
-    try {
-      const qs = new URLSearchParams({
-        category_id: categoryId,
-        city: cityToUse,
-        exam_date: examDate,
-      }).toString();
-      const pickedRes = await api(`/api/svp/exam-sessions?${qs}`);
-      const pickedList = pickArray(pickedRes).map(normalizeSession).filter((s) => s.id);
-      setSessionsRaw(pickedRes);
-      if (pickedList[0]) {
-        const first = pickedList[0];
-        setSelectedSessionId(first.id);
-        if (!city && first.cityName) setCity(first.cityName);
-        if (!cityId && first.cityId) setCityId(first.cityId);
-      }
+      setLoading(true);
+      setOut("Loading exam sessions...");
+      try {
+        const qs = new URLSearchParams({
+          category_id: categoryId,
+          city: cityToUse,
+          exam_date: examDate,
+        }).toString();
+        const res = await api(`/api/svp/exam-sessions?${qs}`);
+        const list = pickArray(res).map(normalizeSession).filter((s) => s.id);
+        setSessionsRaw(res);
 
-      if (pickedList.length === 0) {
-        setOut("No sessions found for selected date/category. Try another date or city.");
-      } else {
-        setOut(JSON.stringify(pickedRes, null, 2));
+        if (list[0]) {
+          setSelectedSessionId(list[0].id);
+          setSelectedTestCenterId(list[0].testCenterId || list[0].siteId);
+          if (!city) setCity(list[0].cityName);
+          if (!cityId) setCityId(list[0].cityId);
+        }
+
+        if (list.length === 0) setOut("No sessions found for selected date/category/city.");
+        else setOut(JSON.stringify(res, null, 2));
+      } catch (err) {
+        setOut(JSON.stringify(err.data || err.message, null, 2));
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setOut(JSON.stringify(err.data || err.message, null, 2));
-    } finally {
-      setLoading(false);
-    }
-  }, [categoryId, city, cityId, cityOptions, examDate]);
+    },
+    [categoryId, city, cityId, cityOptions, examDate]
+  );
 
   async function createHold() {
     if (!selectedSessionId) return setOut("Select exam session first.");
@@ -288,55 +354,22 @@ export default function ExamBooking() {
     }
   }
 
-  function extractHoldId(json) {
-    return json?.hold_id || json?.id || json?.data?.hold_id || json?.data?.id || null;
-  }
-
-  function extractReservationId(json) {
-    return (
-      json?.reservation?.id ||
-      json?.reservation_id ||
-      json?.id ||
-      json?.data?.reservation?.id ||
-      json?.data?.reservation_id ||
-      json?.data?.id ||
-      null
-    );
-  }
-
-  function extractPaymentId(json) {
-    return (
-      json?.payment?.id ||
-      json?.payment_id ||
-      json?.id ||
-      json?.data?.payment?.id ||
-      json?.data?.payment_id ||
-      json?.data?.id ||
-      null
-    );
-  }
-
   async function bookReservation() {
     if (!selectedSessionId) return setOut("Select exam session first.");
     if (!occupationId) return setOut("Select occupation first.");
 
-    const holdId = holdRaw ? extractHoldId(holdRaw) : null;
-    const payloadSiteId = siteId ? Number(siteId) : null;
-    const payloadSiteCity = siteCity || city || null;
-
-    const body = {
-      exam_session_id: Number(selectedSessionId),
-      occupation_id: Number(occupationId),
-      language_code: languageCode,
-      site_id: payloadSiteId,
-      site_city: payloadSiteCity,
-      hold_id: holdId,
-      methodology,
-    };
-
     setLoading(true);
     setOut("Booking exam reservation...");
     try {
+      const body = {
+        exam_session_id: Number(selectedSessionId),
+        occupation_id: Number(occupationId),
+        language_code: languageCode,
+        site_id: siteId ? Number(siteId) : null,
+        site_city: siteCity || city || null,
+        hold_id: holdRaw ? extractHoldId(holdRaw) : null,
+        methodology,
+      };
       const res = await api("/api/svp/exam-reservations", { method: "POST", body });
       setReservationRaw(res);
       const rid = extractReservationId(res);
@@ -350,7 +383,7 @@ export default function ExamBooking() {
   }
 
   async function createPayment() {
-    if (!payableId) return setOut("Reservation ID (payable_id) required for payment.");
+    if (!payableId) return setOut("Reservation ID (payable_id) required.");
     setLoading(true);
     setOut("Creating payment...");
     try {
@@ -393,7 +426,13 @@ export default function ExamBooking() {
     setLoading(true);
     setOut("Finalizing payment...");
     try {
-      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, { method: "PUT" });
+      const body = {};
+      if (paymentGatewayId) body.id = paymentGatewayId;
+      if (paymentResourcePath) body.resourcePath = paymentResourcePath;
+      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, {
+        method: "PUT",
+        body: Object.keys(body).length ? body : undefined,
+      });
       setPaymentFinalizeRaw(res);
       setOut(JSON.stringify(res, null, 2));
     } catch (e) {
@@ -417,7 +456,6 @@ export default function ExamBooking() {
     }
   }
 
-  // Auto-load sessions as soon as date/category is ready.
   useEffect(() => {
     if (!occupationId || !categoryId || !examDate) return;
     loadExamSessions();
@@ -463,10 +501,9 @@ export default function ExamBooking() {
             {selectedOccupation?.categoryName ? <p className="small">{selectedOccupation.categoryName}</p> : null}
           </div>
         </div>
-        <button type="button" onClick={loadOccupations} disabled={loading}>Reload Occupations</button>
-        <p className="small">
-          API: <code>/api/svp/occupations?per_page={occupationPerPage || "194"}&page={occupationPage || "1"}&name={occupationName || ""}</code>
-        </p>
+        <button type="button" onClick={loadOccupations} disabled={loading}>
+          Reload Occupations
+        </button>
       </div>
 
       <div className="card">
@@ -475,14 +512,13 @@ export default function ExamBooking() {
           <div className="row">
             <div>
               <label>start_at_date_from (YYYY-MM-DD)</label>
-              <input type="date" value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} placeholder="auto = today" />
+              <input type="date" value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} />
             </div>
             <div>
               <label>per_page</label>
               <input value={perPage} onChange={(e) => setPerPage(e.target.value)} />
             </div>
           </div>
-
           <div className="row">
             <div>
               <label>available_seats</label>
@@ -493,9 +529,10 @@ export default function ExamBooking() {
               <input value={status} onChange={(e) => setStatus(e.target.value)} />
             </div>
           </div>
-          <button type="submit" disabled={loading}>Search Dates</button>
+          <button type="submit" disabled={loading}>
+            Search Dates
+          </button>
         </form>
-
         {dateList.length > 0 ? (
           <div style={{ marginTop: 10 }}>
             <label>Exam Date</label>
@@ -503,7 +540,9 @@ export default function ExamBooking() {
             <select value={examDate} onChange={(e) => setExamDate(e.target.value)} style={{ marginTop: 8 }}>
               <option value="">Choose available date</option>
               {dateList.map((d) => (
-                <option key={d} value={d}>{d}</option>
+                <option key={d} value={d}>
+                  {d}
+                </option>
               ))}
             </select>
           </div>
@@ -511,7 +550,7 @@ export default function ExamBooking() {
       </div>
 
       <div className="card">
-        <h3>3) City + Sessions</h3>
+        <h3>3) City + Test Center + Sessions</h3>
         <div className="row">
           <div>
             <label>City</label>
@@ -524,7 +563,7 @@ export default function ExamBooking() {
         </div>
         {cityOptions.length > 0 ? (
           <div style={{ marginTop: 8 }}>
-            <label>Detected Cities From Sessions</label>
+            <label>Detected Cities</label>
             <select
               value={`${city}::${cityId}`}
               onChange={(e) => {
@@ -535,21 +574,36 @@ export default function ExamBooking() {
             >
               {cityOptions.map((c) => (
                 <option key={`${c.cityName}::${c.cityId}`} value={`${c.cityName}::${c.cityId}`}>
-                  {c.cityName || "Unknown city"} {c.cityId ? `(city_id: ${c.cityId})` : ""}
+                  {c.cityName} {c.cityId ? `(city_id: ${c.cityId})` : ""}
                 </option>
               ))}
             </select>
           </div>
         ) : null}
-        <button onClick={loadExamSessions} type="button" disabled={loading}>Load Sessions</button>
+        <button onClick={loadExamSessions} type="button" disabled={loading}>
+          Load Sessions
+        </button>
 
-        {sessionList.length > 0 ? (
+        {testCenterOptions.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <label>Test Center</label>
+            <select value={selectedTestCenterId} onChange={(e) => setSelectedTestCenterId(e.target.value)}>
+              {testCenterOptions.map((tc) => (
+                <option key={tc.id} value={tc.id}>
+                  {tc.name} (#{tc.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        {filteredSessions.length > 0 ? (
           <div style={{ marginTop: 12 }}>
             <label>Session</label>
             <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
-              {sessionList.map((s) => (
+              {filteredSessions.map((s) => (
                 <option key={s.id} value={s.id}>
-                  #{s.id} {s.cityName ? `- ${s.cityName}` : ""} {s.testCenterName ? `- ${s.testCenterName}` : ""} {s.startAt ? `- ${s.startAt}` : ""}
+                  #{s.id} - {s.testCenterName || "Center"} {s.startAt ? `- ${s.startAt}` : ""}
                 </option>
               ))}
             </select>
@@ -571,26 +625,30 @@ export default function ExamBooking() {
             <label>Language Code</label>
             <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
               {(selectedOccupation?.languageCodes?.length ? selectedOccupation.languageCodes : [languageCode]).map((code) => (
-                <option key={code} value={code}>{code}</option>
+                <option key={code} value={code}>
+                  {code}
+                </option>
               ))}
             </select>
           </div>
         </div>
-
         <div className="row">
           <div>
-            <label>site_id (auto from session)</label>
+            <label>site_id</label>
             <input value={siteId} onChange={(e) => setSiteId(e.target.value)} />
           </div>
           <div>
-            <label>site_city (auto from session)</label>
+            <label>site_city</label>
             <input value={siteCity} onChange={(e) => setSiteCity(e.target.value)} />
           </div>
         </div>
-
         <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={createHold} type="button" disabled={loading}>Create temporary seat (hold)</button>
-          <button onClick={bookReservation} type="button" disabled={loading}>Book reservation</button>
+          <button onClick={createHold} type="button" disabled={loading}>
+            Create Hold
+          </button>
+          <button onClick={bookReservation} type="button" disabled={loading}>
+            Book Reservation
+          </button>
         </div>
       </div>
 
@@ -618,11 +676,29 @@ export default function ExamBooking() {
             <input value={paymentId} onChange={(e) => setPaymentId(e.target.value)} />
           </div>
         </div>
+        <div className="row">
+          <div>
+            <label>gateway id (from redirect callback `id`)</label>
+            <input value={paymentGatewayId} onChange={(e) => setPaymentGatewayId(e.target.value)} />
+          </div>
+          <div>
+            <label>resourcePath (from callback)</label>
+            <input value={paymentResourcePath} onChange={(e) => setPaymentResourcePath(e.target.value)} />
+          </div>
+        </div>
         <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={createPayment} type="button" disabled={loading}>Create Payment</button>
-          <button onClick={fetchPaymentStatus} type="button" disabled={loading}>Get Payment</button>
-          <button onClick={finalizePayment} type="button" disabled={loading}>Finalize Payment</button>
-          <button onClick={validatePendingPayments} type="button" disabled={loading}>Validate Pending</button>
+          <button onClick={createPayment} type="button" disabled={loading}>
+            Create Payment
+          </button>
+          <button onClick={fetchPaymentStatus} type="button" disabled={loading}>
+            Get Payment
+          </button>
+          <button onClick={finalizePayment} type="button" disabled={loading}>
+            Finalize Payment
+          </button>
+          <button onClick={validatePendingPayments} type="button" disabled={loading}>
+            Validate Pending
+          </button>
         </div>
       </div>
 
@@ -637,28 +713,24 @@ export default function ExamBooking() {
           <pre>{JSON.stringify(reservationRaw, null, 2)}</pre>
         </div>
       ) : null}
-
       {paymentRaw ? (
         <div className="card">
           <h3>Payment Create Result</h3>
           <pre>{JSON.stringify(paymentRaw, null, 2)}</pre>
         </div>
       ) : null}
-
       {paymentStatusRaw ? (
         <div className="card">
           <h3>Payment Status</h3>
           <pre>{JSON.stringify(paymentStatusRaw, null, 2)}</pre>
         </div>
       ) : null}
-
       {paymentFinalizeRaw ? (
         <div className="card">
           <h3>Payment Finalize Result</h3>
           <pre>{JSON.stringify(paymentFinalizeRaw, null, 2)}</pre>
         </div>
       ) : null}
-
       {paymentValidateRaw ? (
         <div className="card">
           <h3>Pending Payment Validation</h3>
@@ -668,11 +740,3 @@ export default function ExamBooking() {
     </div>
   );
 }
-  async function loadExamConstraints() {
-    try {
-      const res = await api("/api/svp/exam-constraints");
-      setConstraintsRaw(res);
-    } catch {
-      // Keep UI working even if constraints endpoint fails.
-    }
-  }
