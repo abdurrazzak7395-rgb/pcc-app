@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../lib/api";
 
@@ -189,32 +189,73 @@ export default function ExamBooking() {
     }
   }
 
-  async function loadExamSessions(e) {
+  const loadExamSessions = useCallback(async (e) => {
     e?.preventDefault?.();
     if (!examDate) return setOut("Select exam date first.");
-    if (!city) return setOut("Select or input city first.");
     setLoading(true);
     setOut("Loading exam sessions...");
 
+    // Try with selected city first (if available), then fallback without city.
+    const attempts = city ? [city, ""] : ["", city];
+    let lastErr = null;
+    let pickedRes = null;
+    let pickedList = [];
+
     try {
-      const qs = new URLSearchParams({
-        category_id: categoryId,
-        city,
-        exam_date: examDate,
-      }).toString();
+      for (const cityAttempt of attempts) {
+        const query = {
+          category_id: categoryId,
+          exam_date: examDate,
+        };
+        if (cityAttempt) query.city = cityAttempt;
 
-      const res = await api(`/api/svp/exam-sessions?${qs}`);
-      setSessionsRaw(res);
+        try {
+          const qs = new URLSearchParams(query).toString();
+          const res = await api(`/api/svp/exam-sessions?${qs}`);
+          const list = pickArray(res).map(normalizeSession).filter((s) => s.id);
 
-      const first = pickArray(res).map(normalizeSession).find((s) => s.id);
-      if (first?.id) setSelectedSessionId(first.id);
-      setOut(JSON.stringify(res, null, 2));
-    } catch (e) {
-      setOut(JSON.stringify(e.data || e.message, null, 2));
+          if (list.length > 0) {
+            pickedRes = res;
+            pickedList = list;
+            break;
+          }
+
+          // Keep the first successful empty response in case nothing else returns rows.
+          if (!pickedRes) {
+            pickedRes = res;
+            pickedList = list;
+          }
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      if (!pickedRes && lastErr) throw lastErr;
+      if (!pickedRes) {
+        setSessionsRaw(null);
+        setOut("No sessions response from API.");
+        return;
+      }
+
+      setSessionsRaw(pickedRes);
+      if (pickedList[0]) {
+        const first = pickedList[0];
+        setSelectedSessionId(first.id);
+        if (!city && first.cityName) setCity(first.cityName);
+        if (!cityId && first.cityId) setCityId(first.cityId);
+      }
+
+      if (pickedList.length === 0) {
+        setOut("No sessions found for selected date/category. Try another date or city.");
+      } else {
+        setOut(JSON.stringify(pickedRes, null, 2));
+      }
+    } catch (err) {
+      setOut(JSON.stringify(err.data || err.message, null, 2));
     } finally {
       setLoading(false);
     }
-  }
+  }, [categoryId, city, cityId, examDate]);
 
   async function createHold() {
     if (!selectedSessionId) return setOut("Select exam session first.");
@@ -269,6 +310,12 @@ export default function ExamBooking() {
     }
   }
 
+  // Auto-load sessions as soon as date/category is ready.
+  useEffect(() => {
+    if (!occupationId || !categoryId || !examDate) return;
+    loadExamSessions();
+  }, [occupationId, categoryId, examDate, loadExamSessions]);
+
   return (
     <div className="container">
       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -304,7 +351,7 @@ export default function ExamBooking() {
           <div className="row">
             <div>
               <label>start_at_date_from (YYYY-MM-DD)</label>
-              <input value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} placeholder="auto = today" />
+              <input type="date" value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} placeholder="auto = today" />
             </div>
             <div>
               <label>per_page</label>
@@ -328,7 +375,9 @@ export default function ExamBooking() {
         {dateList.length > 0 ? (
           <div style={{ marginTop: 10 }}>
             <label>Exam Date</label>
-            <select value={examDate} onChange={(e) => setExamDate(e.target.value)}>
+            <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} />
+            <select value={examDate} onChange={(e) => setExamDate(e.target.value)} style={{ marginTop: 8 }}>
+              <option value="">Choose available date</option>
               {dateList.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}

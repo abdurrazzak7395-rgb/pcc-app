@@ -57,7 +57,10 @@ export default function CreateBookingModal({ open, onClose }) {
   }, [open]);
 
   const sessionList = useMemo(() => sessions || [], [sessions]);
-  const cities = useMemo(() => uniq(sessionList.map((s) => s.city)), [sessionList]);
+  const cities = useMemo(
+    () => uniq(sessionList.map((s) => s?.city || s?.site_city_name || s?.test_center_city).filter(Boolean)),
+    [sessionList]
+  );
   const selectedOccupation = useMemo(
     () => occupations.find((o) => String(o?.id) === String(occupationId)) || null,
     [occupations, occupationId]
@@ -90,21 +93,30 @@ export default function CreateBookingModal({ open, onClose }) {
   }, [selectedSession, city]);
 
   async function loadSessions() {
-    if (!city || !examDate) return setMsg("Select city and date first.");
+    if (!examDate) return setMsg("Select date first.");
     try {
       setLoading(true);
       setMsg("Loading sessions...");
-      const qs = new URLSearchParams({
+      const query = {
         category_id: categoryId,
-        city,
         exam_date: examDate,
-      }).toString();
+      };
+      if (city) query.city = city;
+      const qs = new URLSearchParams(query).toString();
 
       const res = await api(`/api/svp/exam-sessions?${qs}`);
       const list = pickArray(res);
       setSessions(list);
       if (list?.[0]?.id || list?.[0]?.exam_session_id) {
         setSessionId(String(list[0]?.id || list[0]?.exam_session_id));
+      }
+      if (!city) {
+        const autoCity =
+          list?.[0]?.city ||
+          list?.[0]?.site_city_name ||
+          list?.[0]?.test_center_city ||
+          list?.[0]?.site_city?.name;
+        if (autoCity) setCity(String(autoCity));
       }
       setMsg("");
     } catch (e) {
@@ -203,9 +215,20 @@ export default function CreateBookingModal({ open, onClose }) {
             </div>
             <div style={{ flex: 1 }}>
               <label>Available Date *</label>
-              <input placeholder="YYYY-MM-DD" value={examDate} onChange={(e) => setExamDate(e.target.value)} />
+              <input type="date" placeholder="YYYY-MM-DD" value={examDate} onChange={(e) => setExamDate(e.target.value)} />
             </div>
           </div>
+
+          {cities.length > 0 ? (
+            <div>
+              <label>Detected Cities</label>
+              <select value={city} onChange={(e) => setCity(e.target.value)}>
+                {cities.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ flex: 1 }}>
