@@ -1,0 +1,21 @@
+{
+  "CI_COMMIT_SHORT_SHA": "3bd12d0f",
+  "CI_PROJECT_NAME": "svp-international-spa",
+  "DEBUG": "false",
+  "NODE_ENV": "production",
+  "PORTFOLIO_NAME": "svp",
+  "VUE_APP_ACTION_CABLE_URL": "https://svp-international-api.pacc.sa/cable",
+  "VUE_APP_API_URL": "https://svp-international-api.pacc.sa/api/v1",
+  "VUE_APP_BASE_URL": "https://svp-international.pacc.sa",
+  "VUE_APP_CERTIFICATE_PRICE": "25",
+  "VUE_APP_CLARITY_ENABLED": "true",
+  "VUE_APP_CLARITY_ID": "nm26lw0boc",
+  "VUE_APP_ENV": "production",
+  "VUE_APP_GTM_KEY": "GTM-5TV8929L",
+  "VUE_APP_HOST": "svp-international.pacc.sa",
+  "VUE_APP_MAP_API_KEY": "AIzaSyBbmPcY4YBsWhyoMGeGD6H3_e16ToGoAps",
+  "VUE_APP_PAYMENT_API": "https://eu-prod.oppwa.com/v1/paymentWidgets.js",
+  "VUE_APP_RECAPTCHA_KEY": "6LdhZ_IUAAAAABjY17EoRq8fLJSj8dtNgcMeddrr",
+  "VUE_APP_SERVER_URL": "https://svp-international-api.pacc.sa",
+  "VUE_APP_ZENDESK_KEY": "80b3ed13-ca6c-41ce-b8b2-9c82787ed3c0"
+}
