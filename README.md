@@ -45,6 +45,37 @@ Go to: http://localhost:3000/auth/login
 - Public runtime keys in `frontend/public/config.json` are placeholders. Set your own values before deployment.
 - Do not commit private `.env` files (`backend/.env`, `frontend/.env.local`).
 
+## Live Deploy (Railway + Vercel)
+
+Backend on Railway:
+1. Create a new Railway service from this repo and set **Root Directory** to `backend`.
+2. Railway reads `backend/railway.toml` and runs `bash start.sh`.
+3. Add backend env vars in Railway:
+   - `NODE_ENV=production`
+   - `APP_NAME=SVP Backend API`
+   - `PORT=4000` (Railway can also inject its own port)
+   - `CORS_ORIGINS=https://your-frontend-domain.vercel.app`
+   - `JWT_ACCESS_SECRET=...`
+   - `JWT_REFRESH_SECRET=...`
+   - `ACCESS_TOKEN_TTL_SECONDS=900`
+   - `REFRESH_TOKEN_TTL_DAYS=14`
+   - `COOKIE_SECURE=true`
+   - `COOKIE_SAMESITE=none`
+   - `DATABASE_URL=...` (Railway Postgres URL)
+   - `SVP_BASE_URL=https://svp-international-api.pacc.sa`
+   - `SVP_LOCALE=en`
+   - `SVP_FE_APP=legislator`
+   - `SESSION_ENC_KEY_BASE64=...`
+4. Deploy and test:
+   - `GET https://your-railway-backend-url/health`
+
+Frontend on Vercel:
+1. Import this repo into Vercel and set **Root Directory** to `frontend`.
+2. Vercel uses `frontend/vercel.json` and builds Next.js.
+3. Add env var in Vercel:
+   - `NEXT_PUBLIC_BACKEND_URL=https://your-railway-backend-url`
+4. Deploy and open your live website URL from Vercel.
+
 ### Make GitHub Repo Public
 1. Open repo settings: `https://github.com/abdurrazzak7395-rgb/pcc-app/settings`
 2. Go to **General** -> **Danger Zone**.
